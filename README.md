@@ -36,6 +36,28 @@ Svaki pokušaj uvoza (ručni i automatski) ostavlja trag u tablici
 `archive_imports` (status, trajanje, statistika, poruka greške) — to se vidi
 na nadzornoj ploči (`/`).
 
+## Popis za kupovinu (`/shopping-list`)
+
+Upišeš stavke (jedna po retku), odabereš grad, a `App\Services\ShoppingListService`:
+
+1. Za svaku stavku nađe naziv proizvoda koji joj najbolje odgovara —
+   PostgreSQL `pg_trgm` (`ILIKE` + `similarity()`, GIN indeks na
+   `products.name`), s prednošću za nazive koji **počinju** tom riječi (npr.
+   za "mlijeko" ne smije pobijediti "VRČ ZA MLIJEKO").
+2. Skupi i sve gotovo identične varijante tog naziva kod drugih lanaca
+   ("COCA COLA 2l" / "GAZ PIĆE COCA COLA 2L" / "SOK COCA COLA 2L PET…" —
+   isti proizvod, svaki lanac ga drukčije zove) i preko pravog EAN barkoda
+   (obični niz od 8-14 znamenki) poveže sve te zapise kao "isti proizvod"
+   kroz lance. Kad proizvod nema pravi EAN (arhiva tada koristi
+   `<lanac>:<sifra>`), usporedba ostaje samo unutar tog jednog lanca.
+3. Za odabrani grad ispiše: najjeftiniju poslovnicu po stavci, i poslovnice
+   rangirane po tome koliko stavki s popisa uopće imaju (pa po ukupnoj
+   cijeni) — za kupovinu na jednom mjestu.
+
+Poznato ograničenje: kratki/generički pojmovi (npr. samo "mlijeko") mogu
+pogoditi manje poznat proizvod ako ima kraći/sličniji naziv — nema pojma o
+"popularnosti" proizvoda, samo o sličnosti teksta.
+
 ## Baza podataka
 
 - `chains`, `stores`, `products` — matični podaci po lancu.
@@ -187,9 +209,9 @@ php artisan archive:import
 
 - Prijava je namjerno minimalna (jedan račun, bez registracije/reset lozinke
   putem e-maila) — dovoljno za osobnu/internu upotrebu.
-- Pretraga proizvoda (`/products`) koristi `ILIKE` bez posebnog indeksa za
-  tekstualnu pretragu; ako pretraga s vremenom postane spora uz veći broj
-  proizvoda, razmisliti o `pg_trgm` GIN indeksu na `products.name`.
+- Pretraga proizvoda (`/products`) koristi običan `ILIKE`; `pg_trgm` GIN
+  indeks na `products.name` (uveden za popis za kupovinu) bi ubrzao i ovu
+  pretragu ako zatreba.
 - `config/cijene.php` sadrži mapiranje šifre lanca (naziv mape u arhivi) na
   čitljivo ime — ako cijene.dev doda novi lanac, aplikacija će ga
   automatski uvesti pod generiranim imenom dok se ne doda u mapiranje.

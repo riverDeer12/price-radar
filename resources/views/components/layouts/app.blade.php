@@ -20,6 +20,7 @@
                 <div class="flex items-center gap-4 text-sm font-medium text-slate-600">
                     <a href="{{ route('dashboard') }}" class="hover:text-slate-900 {{ request()->routeIs('dashboard') ? 'text-indigo-600' : '' }}">Nadzorna ploča</a>
                     <a href="{{ route('products') }}" class="hover:text-slate-900 {{ request()->routeIs('products') ? 'text-indigo-600' : '' }}">Proizvodi i cijene</a>
+                    <a href="{{ route('shopping-list') }}" class="hover:text-slate-900 {{ request()->routeIs('shopping-list') ? 'text-indigo-600' : '' }}">Popis za kupovinu</a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="hover:text-slate-900">Odjava</button>

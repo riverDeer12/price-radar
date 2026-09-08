@@ -15,4 +15,5 @@ Route::post('/logout', [AuthController::class, 'destroy'])
 Route::middleware('auth')->group(function () {
     Route::view('/', 'pages.dashboard')->name('dashboard');
     Route::view('/products', 'pages.products')->name('products');
+    Route::view('/shopping-list', 'pages.shopping-list')->name('shopping-list');
 });
