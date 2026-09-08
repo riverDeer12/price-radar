@@ -34,9 +34,62 @@ new class extends Component
     }
 
     #[Computed]
+    public function currentImport(): ?ArchiveImport
+    {
+        return ArchiveImport::whereIn('status', ['pending', 'downloading', 'importing'])
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    #[Computed]
     public function isImportRunning(): bool
     {
-        return ArchiveImport::whereIn('status', ['pending', 'downloading', 'importing'])->exists();
+        return $this->currentImport !== null;
+    }
+
+    /**
+     * Rough "how much longer" estimate from progress-so-far, not shown
+     * until there's enough signal to not be wildly wrong.
+     */
+    public function estimateEtaSeconds(ArchiveImport $import): ?int
+    {
+        $progress = $import->progress ?? [];
+        $phase = $progress['phase'] ?? null;
+
+        if ($phase === 'downloading' && ($progress['percent'] ?? 0) >= 3) {
+            $elapsed = now()->diffInSeconds($import->started_at);
+            $percent = $progress['percent'];
+
+            return (int) round($elapsed / $percent * (100 - $percent));
+        }
+
+        if ($phase === 'importing' && ($progress['chains_done'] ?? 0) >= 2 && ($progress['phase_started_at'] ?? null)) {
+            $phaseStart = \Illuminate\Support\Carbon::parse($progress['phase_started_at']);
+            $elapsed = now()->diffInSeconds($phaseStart);
+            $done = $progress['chains_done'];
+            $total = $progress['chains_total'] ?? 0;
+
+            if ($done <= 0 || $total <= $done) {
+                return null;
+            }
+
+            return (int) round($elapsed / $done * ($total - $done));
+        }
+
+        return null;
+    }
+
+    public function formatEta(?int $seconds): ?string
+    {
+        if ($seconds === null) {
+            return null;
+        }
+
+        if ($seconds < 60) {
+            return 'manje od minute';
+        }
+
+        return '~'.(int) round($seconds / 60).' min';
     }
 
     public function triggerImport(ArchiveImportService $service): void
@@ -113,6 +166,70 @@ new class extends Component
             @endif
         </div>
     </div>
+
+    @if ($this->currentImport)
+        @php
+            $progress = $this->currentImport->progress ?? [];
+            $phase = $progress['phase'] ?? 'downloading';
+            $eta = $this->formatEta($this->estimateEtaSeconds($this->currentImport));
+
+            $phaseLabel = match ($phase) {
+                'downloading' => 'Preuzimanje arhive s cijene.dev',
+                'extracting' => 'Raspakiravanje arhive',
+                'importing' => 'Obrada trgovačkih lanaca',
+                'finalizing' => 'Spremanje u bazu (povijest cijena i trenutne cijene)',
+                default => 'Uvoz u tijeku',
+            };
+
+            $percent = match ($phase) {
+                'downloading' => $progress['percent'] ?? 0,
+                'importing' => ($progress['chains_total'] ?? 0) > 0
+                    ? (int) round((($progress['chains_done'] ?? 0) / $progress['chains_total']) * 100)
+                    : 0,
+                default => null,
+            };
+        @endphp
+
+        <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-sm font-medium text-indigo-900">
+                    <svg class="h-4 w-4 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    {{ $phaseLabel }}
+                </div>
+                <div class="text-xs text-indigo-700">
+                    traje {{ $this->currentImport->started_at->diffForHumans(now(), true) }}
+                    @if ($eta)
+                        &middot; preostalo {{ $eta }}
+                    @endif
+                </div>
+            </div>
+
+            @if ($phase === 'importing' && ($progress['current_chain_name'] ?? null))
+                <p class="mt-1 text-xs text-indigo-700">
+                    Trenutni lanac: <span class="font-medium">{{ $progress['current_chain_name'] }}</span>
+                    ({{ $progress['chains_done'] ?? 0 }}/{{ $progress['chains_total'] ?? '?' }})
+                </p>
+            @elseif ($phase === 'downloading' && ($progress['total_bytes'] ?? null))
+                <p class="mt-1 text-xs text-indigo-700">
+                    {{ number_format(($progress['downloaded_bytes'] ?? 0) / 1048576, 1) }} MB
+                    / {{ number_format($progress['total_bytes'] / 1048576, 1) }} MB
+                </p>
+            @elseif ($phase === 'finalizing')
+                <p class="mt-1 text-xs text-indigo-700">Ovo može potrajati par minuta za velike lance — bez brige, ne treba osvježavati stranicu.</p>
+            @endif
+
+            <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-indigo-100">
+                @if ($percent !== null)
+                    <div class="h-full rounded-full bg-indigo-600 transition-all duration-500" style="width: {{ max(3, $percent) }}%"></div>
+                @else
+                    <div class="h-full w-1/3 animate-pulse rounded-full bg-indigo-600"></div>
+                @endif
+            </div>
+        </div>
+    @endif
 
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
         @foreach ([

@@ -62,6 +62,7 @@ class ArchiveImportService
 
         $import->update([
             'status' => 'downloading',
+            'progress' => ['phase' => 'downloading', 'percent' => 0, 'phase_started_at' => now()->toIso8601String()],
             'started_at' => now(),
             'finished_at' => null,
             'error_message' => null,
@@ -72,15 +73,17 @@ class ArchiveImportService
         $extractDir = "{$workDir}-extracted";
 
         try {
-            $this->downloadZip($sourceUrl, $zipPath);
+            $this->downloadZip($sourceUrl, $zipPath, $import);
 
             $import->update(['status' => 'importing']);
+            $this->setProgress($import, ['phase' => 'extracting', 'phase_started_at' => now()->toIso8601String()]);
 
             $rootDir = $this->extractZip($zipPath, $extractDir);
-            $stats = $this->processArchive($rootDir, $date);
+            $stats = $this->processArchive($rootDir, $date, $import);
 
             $import->update([
                 'status' => 'completed',
+                'progress' => null,
                 'finished_at' => now(),
                 'stats' => $stats,
             ]);
@@ -102,13 +105,54 @@ class ArchiveImportService
         return $import->fresh();
     }
 
-    private function downloadZip(string $url, string $destPath): void
+    /**
+     * Merge fields into the import's live-progress column so the dashboard
+     * (polling every few seconds) can show what's happening right now.
+     * Uses a plain DB update rather than touching $import's own in-memory
+     * attributes, so callers don't have to keep re-fetching the model.
+     */
+    private function setProgress(ArchiveImport $import, array $patch): void
+    {
+        $current = DB::table('archive_imports')->where('id', $import->id)->value('progress');
+        $current = $current ? json_decode($current, true) : [];
+
+        DB::table('archive_imports')
+            ->where('id', $import->id)
+            ->update(['progress' => json_encode(array_merge($current, $patch))]);
+    }
+
+    private function downloadZip(string $url, string $destPath, ArchiveImport $import): void
     {
         if (! is_dir(dirname($destPath))) {
             mkdir(dirname($destPath), 0755, true);
         }
 
-        $response = Http::timeout(600)->withOptions(['sink' => $destPath])->get($url);
+        $lastReported = 0.0;
+
+        $response = Http::timeout(600)->withOptions([
+            'sink' => $destPath,
+            'progress' => function (int $downloadTotal, int $downloaded) use ($import, &$lastReported) {
+                if ($downloadTotal <= 0) {
+                    return;
+                }
+
+                $now = microtime(true);
+
+                if ($downloaded < $downloadTotal && $now - $lastReported < 1.0) {
+                    return;
+                }
+
+                $lastReported = $now;
+
+                $this->setProgress($import, [
+                    'phase' => 'downloading',
+                    'percent' => (int) round(($downloaded / $downloadTotal) * 100),
+                    'downloaded_bytes' => $downloaded,
+                    'total_bytes' => $downloadTotal,
+                ]);
+            },
+        ])->get($url);
+
         $response->throw();
     }
 
@@ -184,13 +228,11 @@ class ArchiveImportService
     /**
      * @return array{chains: array, history_inserted: int, prices_upserted: int, stale_removed: int}
      */
-    private function processArchive(string $rootDir, string $archiveDate): array
+    private function processArchive(string $rootDir, string $archiveDate, ArchiveImport $import): array
     {
         DB::table('price_import_staging')->truncate();
 
-        $chainStats = [];
-        $successfulChainIds = [];
-
+        $chainDirs = [];
         foreach (scandir($rootDir) ?: [] as $entry) {
             if ($entry === '.' || $entry === '..' || $entry === '__MACOSX' || str_starts_with($entry, '.')) {
                 continue;
@@ -198,9 +240,31 @@ class ArchiveImportService
 
             $chainDir = "{$rootDir}/{$entry}";
 
-            if (! is_dir($chainDir) || ! is_file("{$chainDir}/prices.csv")) {
-                continue;
+            if (is_dir($chainDir) && is_file("{$chainDir}/prices.csv")) {
+                $chainDirs[$entry] = $chainDir;
             }
+        }
+
+        $chainNames = config('cijene.chain_names', []);
+        $chainsTotal = count($chainDirs);
+
+        $this->setProgress($import, [
+            'phase' => 'importing',
+            'phase_started_at' => now()->toIso8601String(),
+            'chains_total' => $chainsTotal,
+            'chains_done' => 0,
+        ]);
+
+        $chainStats = [];
+        $successfulChainIds = [];
+        $chainsDone = 0;
+
+        foreach ($chainDirs as $entry => $chainDir) {
+            $this->setProgress($import, [
+                'current_chain' => $entry,
+                'current_chain_name' => $chainNames[$entry] ?? ucwords(str_replace(['-', '_'], ' ', $entry)),
+                'chains_done' => $chainsDone,
+            ]);
 
             try {
                 $chainStats[$entry] = $this->importChainDirectory($entry, $chainDir);
@@ -209,7 +273,16 @@ class ArchiveImportService
                 Log::error("Failed importing chain '{$entry}'", ['error' => $e->getMessage()]);
                 $chainStats[$entry] = ['error' => $e->getMessage()];
             }
+
+            $chainsDone++;
+            $this->setProgress($import, ['chains_done' => $chainsDone]);
         }
+
+        $this->setProgress($import, [
+            'phase' => 'finalizing',
+            'phase_started_at' => now()->toIso8601String(),
+            'current_chain' => null,
+        ]);
 
         $this->deduplicateStaging();
 
