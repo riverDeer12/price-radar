@@ -58,7 +58,7 @@ Poznato ograničenje: kratki/generički pojmovi (npr. samo "mlijeko") mogu
 pogoditi manje poznat proizvod ako ima kraći/sličniji naziv — nema pojma o
 "popularnosti" proizvoda, samo o sličnosti teksta.
 
-## Skeniraj barkod (`/scan`)
+## Skeniraj barkod (kartica "Skeniraj barkod" na `/products`)
 
 Za slučaj kad artikl u trgovini nema istaknutu cijenu: skeniraj barkod
 kamerom telefona (ili ga upiši ručno) i `App\Services\BarcodeLookupService`
@@ -71,7 +71,9 @@ adrese — opcionalno suženo na jedan grad.
   UPC-A/UPC-E/Code128. **Zahtijeva HTTPS** (ili `localhost`) — na produkciji
   radi čim je nginx iza certbota (vidi Deployment ispod); na `http://` bez
   toga preglednik neće dati pristup kameri, pa je ručni unos uvijek dostupan
-  kao fallback.
+  kao fallback. Kamera se pokreće tek kad se otvori kartica "Skeniraj
+  barkod" (ne traži dopuštenje unaprijed, dok je korisnik na "Pretraga"
+  kartici).
 - Neki lanci koriste isti "placeholder" barkod (npr. `9999999999994`) za
   desetke potpuno nepovezanih proizvoda bez pravog EAN-a (rinfuzno voće,
   biljke). `App\Support\Barcode::isRealEan()` to prepoznaje (premalo

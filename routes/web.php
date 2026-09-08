@@ -16,5 +16,7 @@ Route::middleware('auth')->group(function () {
     Route::view('/', 'pages.dashboard')->name('dashboard');
     Route::view('/products', 'pages.products')->name('products');
     Route::view('/shopping-list', 'pages.shopping-list')->name('shopping-list');
-    Route::view('/scan', 'pages.scan')->name('scan');
+
+    // Barcode scanning now lives as a tab on the products page.
+    Route::redirect('/scan', '/products');
 });

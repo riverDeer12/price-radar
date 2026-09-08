@@ -63,13 +63,10 @@ new class extends Component
 ?>
 
 <div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Skeniraj barkod</h1>
-        <p class="mt-1 text-sm text-slate-500">
-            Ako artikl u trgovini nema istaknutu cijenu, skeniraj barkod (ili ga upiši ručno) da vidiš zadnju
-            poznatu cijenu po lancu.
-        </p>
-    </div>
+    <p class="text-sm text-slate-500">
+        Ako artikl u trgovini nema istaknutu cijenu, skeniraj barkod (ili ga upiši ručno) da vidiš zadnju
+        poznatu cijenu po lancu.
+    </p>
 
     <div class="grid gap-6 lg:grid-cols-2">
         <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -163,10 +160,17 @@ new class extends Component
 
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
-        document.addEventListener('livewire:init', () => {
-            if (typeof Html5QrcodeScanner === 'undefined') {
+        // Started on demand (e.g. when this tab is first opened) rather than
+        // on page load, since the reader's a few page away — starting the
+        // camera immediately would prompt for permission before the user
+        // even asked to scan anything, and measuring the container while a
+        // parent tab panel is hidden can leave it mis-sized.
+        window.initBarcodeScanner = window.initBarcodeScanner || function () {
+            if (window.initBarcodeScanner.started || typeof Html5QrcodeScanner === 'undefined') {
                 return;
             }
+
+            window.initBarcodeScanner.started = true;
 
             const scanner = new Html5QrcodeScanner('barcode-reader', {
                 fps: 10,
@@ -191,6 +195,6 @@ new class extends Component
                 @this.call('lookup', decodedText);
                 setTimeout(() => { locked = false; }, 2000);
             });
-        });
+        };
     </script>
 </div>

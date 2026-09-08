@@ -65,10 +65,7 @@ new class extends Component
 ?>
 
 <div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-semibold text-slate-900">Proizvodi i cijene</h1>
-        <p class="mt-1 text-sm text-slate-500">Pretraži trenutne cijene po svim uvezenim trgovačkim lancima.</p>
-    </div>
+    <p class="text-sm text-slate-500">Pretraži trenutne cijene po svim uvezenim trgovačkim lancima.</p>
 
     <div class="flex flex-col gap-3 sm:flex-row">
         <input
