@@ -58,6 +58,27 @@ Poznato ograničenje: kratki/generički pojmovi (npr. samo "mlijeko") mogu
 pogoditi manje poznat proizvod ako ima kraći/sličniji naziv — nema pojma o
 "popularnosti" proizvoda, samo o sličnosti teksta.
 
+## Skeniraj barkod (`/scan`)
+
+Za slučaj kad artikl u trgovini nema istaknutu cijenu: skeniraj barkod
+kamerom telefona (ili ga upiši ručno) i `App\Services\BarcodeLookupService`
+prikaže **stvarni** EAN barkod pronađen u `products.barcode`, cijenu po
+svakom lancu koji ga prodaje (najjeftiniji prvi), broj poslovnica i primjer
+adrese — opcionalno suženo na jedan grad.
+
+- Kamera koristi [html5-qrcode](https://github.com/mebjas/html5-qrcode)
+  (učitano preko CDN-a, bez Node build koraka) s formatima EAN-13/EAN-8/
+  UPC-A/UPC-E/Code128. **Zahtijeva HTTPS** (ili `localhost`) — na produkciji
+  radi čim je nginx iza certbota (vidi Deployment ispod); na `http://` bez
+  toga preglednik neće dati pristup kameri, pa je ručni unos uvijek dostupan
+  kao fallback.
+- Neki lanci koriste isti "placeholder" barkod (npr. `9999999999994`) za
+  desetke potpuno nepovezanih proizvoda bez pravog EAN-a (rinfuzno voće,
+  biljke). `App\Support\Barcode::isRealEan()` to prepoznaje (premalo
+  različitih znamenki) i takve kodove tretira kao "nije pronađeno" umjesto
+  da izmiješa nepovezane proizvode — koristi ga i ovaj servis i
+  `ShoppingListService`.
+
 ## Baza podataka
 
 - `chains`, `stores`, `products` — matični podaci po lancu.

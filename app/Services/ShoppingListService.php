@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Support\Barcode;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ShoppingListService
@@ -136,10 +138,8 @@ class ShoppingListService
         $threshold = max(0.0, $best->sim - 0.15);
         $relevant = $matches->filter(fn ($m) => $m->sim >= $threshold);
 
-        $isRealEan = fn (?string $barcode) => $barcode && preg_match('/^\d{8,14}$/', $barcode);
-
-        $barcodes = $relevant->pluck('barcode')->filter($isRealEan)->unique()->values();
-        $productIds = $relevant->reject(fn ($m) => $isRealEan($m->barcode))->pluck('id')->all();
+        $barcodes = $relevant->pluck('barcode')->filter(Barcode::isRealEan(...))->unique()->values();
+        $productIds = $relevant->reject(fn ($m) => Barcode::isRealEan($m->barcode))->pluck('id')->all();
 
         if ($barcodes->isNotEmpty()) {
             $productIds = array_merge(
@@ -157,7 +157,7 @@ class ShoppingListService
     /**
      * @param  int[]  $productIds
      */
-    private function offersForCandidates(array $productIds, string $city): \Illuminate\Support\Collection
+    private function offersForCandidates(array $productIds, string $city): Collection
     {
         if ($productIds === []) {
             return collect();
