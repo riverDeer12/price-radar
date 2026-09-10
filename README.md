@@ -197,7 +197,7 @@ php artisan archive:import
    [Service]
    User=www-data
    WorkingDirectory=/var/www/price-radar
-   ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=1 --max-time=3600
+   ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=1 --max-time=3600 --memory=1024
    Restart=always
 
    [Install]
@@ -207,6 +207,15 @@ php artisan archive:import
    ```bash
    sudo systemctl enable --now price-radar-worker
    ```
+
+   `--memory=1024` matters: Laravel's queue worker self-stops once it
+   passes its own memory ceiling (**default 128 MB**, checked after each
+   job) — a full archive import routinely uses several hundred MB while
+   processing the larger chains (Konzum, Lidl, Plodine…). Without raising
+   it, the worker exits (code 12) after *every* import and only comes back
+   because `Restart=always` restarts it — harmless with systemd, but the
+   import itself still finishes fine either way since the job runs to
+   completion before that check happens.
 
 5. **Scheduler** (pokreće `archive:import` svaki dan u 10:00 — vidi
    `routes/console.php`). Jedan cron unos pokreće Laravelov scheduler svake

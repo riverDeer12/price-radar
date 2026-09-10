@@ -198,6 +198,9 @@ new class extends Component
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                     </svg>
                     {{ $phaseLabel }}
+                    @if ($percent !== null)
+                        <span class="tabular-nums text-indigo-600">— {{ $percent }}%</span>
+                    @endif
                 </div>
                 <div class="text-xs text-indigo-700">
                     traje {{ $this->currentImport->started_at->diffForHumans(now(), true) }}
